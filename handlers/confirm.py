@@ -282,7 +282,7 @@ async def handle_confirm_callback(update: Update, context: ContextTypes.DEFAULT_
         suggested_price = int(parts[2])
         try:
             await update_our_price(product_id, suggested_price)
-            await query.edit_message_text(ff"✅ Цена Пэш обновлена: {suggested_price}₸")
+            await query.edit_message_text(f"✅ Цена Пэш обновлена: {suggested_price}₸")
         except Exception as e:
             await query.edit_message_text(f"❌ Ошибка: {str(e)[:50]}")
         return None
