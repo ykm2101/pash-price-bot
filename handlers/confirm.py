@@ -243,24 +243,42 @@ async def handle_confirm_callback(update: Update, context: ContextTypes.DEFAULT_
                 prev_snap = await get_latest_price_by_source(product_id, source_id)
                 old_price_for_alert = prev_snap["price"] if prev_snap else None
 
-                await insert_snapshot(product_id, source_id, price, unit, "Текст: источник выбран")
-                await query.edit_message_text("📌 Зафиксировано.")
-
-                # Алтын-Орда → показать расчёт our_price
+                # Алтын-Орда → price это цена КОНТЕЙНЕРА, нужен вес
                 if source_id == "altyn_orda":
                     product_data = await get_product_with_markup(product_id)
-                    if product_data and product_data.get("markup_pct"):
-                        markup_pct = product_data["markup_pct"]
-                        suggested_price = price * (1 + markup_pct / 100)
-                        msg = f"💡 Закупка {price}₸ → цена Пэш: {suggested_price:,.0f}₸ (+{markup_pct}%)\n\nУстановить как нашу цену?"
-                        buttons = [
-                            [
-                                InlineKeyboardButton("✅ Да", callback_data=f"set_our_price:{product_id}:{int(suggested_price)}"),
-                                InlineKeyboardButton("✏️ Своя цена", callback_data=f"set_custom_price:{product_id}")
-                            ],
-                            [InlineKeyboardButton("⏭ Пропустить", callback_data=f"skip_price:{product_id}")]
-                        ]
+                    stored_weight = None
+                    if product_data:
+                        weights = (await get_latest_price_by_source(product_id, "altyn_orda") or {})
+                        from services.supabase import get_container_weight
+                        stored_weight = await get_container_weight(product_id, "ящик")
+
+                    if stored_weight:
+                        # Вес известен → сразу пересчитать
+                        price_per_kg = round(price / stored_weight, 1)
+                        markup_pct = (product_data or {}).get("markup_pct") or 25
+                        suggested = round(price_per_kg * (1 + markup_pct / 100))
+                        raw = f"{price}₸/ящик ({stored_weight}кг) → {price_per_kg}₸/кг"
+                        await insert_snapshot(product_id, "altyn_orda", price_per_kg, unit, raw)
+                        await query.edit_message_text(f"📌 {price:,.0f}₸ ÷ {stored_weight}кг = {price_per_kg}₸/кг")
+                        msg = f"💡 Цена Пэш: {suggested}₸/кг (+{markup_pct}%)\n\nУстановить?"
+                        buttons = [[
+                            InlineKeyboardButton("✅ Да", callback_data=f"set_our_price:{product_id}:{suggested}"),
+                            InlineKeyboardButton("✖ Пропустить", callback_data=f"skip_price:{product_id}")
+                        ]]
                         await query.message.reply_text(msg, reply_markup=InlineKeyboardMarkup(buttons))
+                    else:
+                        # Вес неизвестен → спросить
+                        context.user_data["pending_weight"] = {
+                            "product_id": product_id,
+                            "product_name": f"product_{product_id}",
+                            "container_price": price,
+                            "container": "ящик",
+                            "unit": unit,
+                            "markup_pct": (product_data or {}).get("markup_pct") or 25,
+                            "our_price": (product_data or {}).get("our_price"),
+                        }
+                        await query.edit_message_text(f"📦 {price:,.0f}₸ с Алтын-Орды. Вес ящика (кг)?")
+                    return None
                 # Магазин/Базар/Лавка → алерты
                 else:
                     product_data = await get_product_with_markup(product_id)
