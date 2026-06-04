@@ -90,7 +90,7 @@ def source_buttons(session_id: str, prefix: str = "partial_source") -> InlineKey
             )
             for k in SOURCE_LIST
         ],
-        [InlineKeyboardButton("❌ Отмена", callback_data=f"partial_cancel:{session_id}")]
+        [InlineKeyboardButton("✖ Отставить", callback_data=f"partial_cancel:{session_id}")]
     ]
     return InlineKeyboardMarkup(buttons)
 
@@ -103,7 +103,7 @@ def container_buttons(session_id: str) -> InlineKeyboardMarkup:
             InlineKeyboardButton(f"{em} {c}", callback_data=f"partial_container:{session_id}:{c}")
             for c, em in containers
         ],
-        [InlineKeyboardButton("❌ Отмена", callback_data=f"partial_cancel:{session_id}")]
+        [InlineKeyboardButton("✖ Отставить", callback_data=f"partial_cancel:{session_id}")]
     ]
     return InlineKeyboardMarkup(buttons)
 
@@ -115,7 +115,7 @@ def unit_buttons(session_id: str) -> InlineKeyboardMarkup:
             InlineKeyboardButton("⚖️ кг", callback_data=f"partial_unit:{session_id}:кг"),
             InlineKeyboardButton("🔢 шт", callback_data=f"partial_unit:{session_id}:шт"),
         ],
-        [InlineKeyboardButton("❌ Отмена", callback_data=f"partial_cancel:{session_id}")]
+        [InlineKeyboardButton("✖ Отставить", callback_data=f"partial_cancel:{session_id}")]
     ]
     return InlineKeyboardMarkup(buttons)
 
@@ -124,10 +124,10 @@ def confirm_buttons(session_id: str) -> InlineKeyboardMarkup:
     """Кнопки подтверждения финального шага."""
     buttons = [
         [
-            InlineKeyboardButton("✅ Записать", callback_data=f"partial_confirm:{session_id}"),
+            InlineKeyboardButton("✅ В базу", callback_data=f"partial_confirm:{session_id}"),
             InlineKeyboardButton("✏️ Исправить", callback_data=f"partial_edit:{session_id}"),
         ],
-        [InlineKeyboardButton("❌ Отмена", callback_data=f"partial_cancel:{session_id}")]
+        [InlineKeyboardButton("✖ Отставить", callback_data=f"partial_cancel:{session_id}")]
     ]
     return InlineKeyboardMarkup(buttons)
 
@@ -141,33 +141,32 @@ async def ask_next(session: Session, reply_func) -> bool:
     sid = session.session_id
 
     if not missing:
-        # Всё заполнено — показать финальное подтверждение
-        msg = f"{known}\n\nЗаписать?"
+        msg = f"{known}\n\nЗафиксировать?"
         await reply_func(msg, reply_markup=confirm_buttons(sid))
-        return False  # больше вопросов нет
+        return False
 
-    session.last_reminded_at = None  # сбросить таймер напоминания
+    session.last_reminded_at = None
 
     if missing == 'product':
-        await reply_func("А что за товар?",
+        await reply_func("Товар?",
                          reply_markup=InlineKeyboardMarkup([[
-                             InlineKeyboardButton("❌ Отмена", callback_data=f"partial_cancel:{sid}")
+                             InlineKeyboardButton("✖ Отставить", callback_data=f"partial_cancel:{sid}")
                          ]]))
 
     elif missing == 'price':
         prefix = f"{known}\n\n" if known != "..." else ""
-        await reply_func(f"{prefix}Цена в тенге?",
+        await reply_func(f"{prefix}Цена?",
                          reply_markup=InlineKeyboardMarkup([[
-                             InlineKeyboardButton("❌ Отмена", callback_data=f"partial_cancel:{sid}")
+                             InlineKeyboardButton("✖ Отставить", callback_data=f"partial_cancel:{sid}")
                          ]]))
 
     elif missing == 'source':
         prefix = f"{known}\n\n" if known != "..." else ""
-        await reply_func(f"{prefix}Откуда цена?",
+        await reply_func(f"{prefix}Источник?",
                          reply_markup=source_buttons(sid))
 
     elif missing == 'container':
-        await reply_func(f"{known}\n\nЧто за упаковка?",
+        await reply_func(f"{known}\n\nТип упаковки?",
                          reply_markup=container_buttons(sid))
 
     return True  # вопрос задан
@@ -182,7 +181,7 @@ async def check_reminder(session: Session, reply_func):
         known = format_known(session.partial)
         session.last_reminded_at = time.time()
         await reply_func(
-            f"Дописать про {known}? Или отмени — просто напиши /cancel",
+            f"Всё ещё жду по {known}. Продолжаем?",
             reply_markup=InlineKeyboardMarkup([[
                 InlineKeyboardButton("❌ Отмена", callback_data=f"partial_cancel:{session.session_id}")
             ]])

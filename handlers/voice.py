@@ -14,7 +14,7 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     """Handle incoming voice messages."""
     user_id = update.effective_user.id
 
-    await update.message.reply_text("⏳ Слушаю...")
+    await update.message.reply_text("🎙 Принял...")
 
     try:
         logger.info(f"Voice received from user {user_id}")
@@ -28,7 +28,7 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         logger.info(f"Parsed result: source={parsed.source}, items={len(parsed.items)}")
 
         if not parsed.items:
-            await update.message.reply_text("🤷 Не нашёл цен. Попробуй ещё раз или введи текстом.")
+            await update.message.reply_text("Цен не обнаружил. Попробуй ещё раз.")
             return
 
         # Determine language for menu
@@ -110,8 +110,8 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         logger.error(f"Voice handler error: {error_str}", exc_info=True)
 
         if "429" in error_str or "quota" in error_str.lower():
-            await update.message.reply_text("⚠️ Лимит Gemini API исчерпан. Используй /price команду вместо голоса.")
+            await update.message.reply_text("⚠️ Лимит API. Используй текст: /price банан 920 магнум")
         elif "Voice parsing failed" in error_str:
-            await update.message.reply_text("🤷 Не смог разобрать. Попробуй ещё раз или введи текстом: /price банан 920 магнум")
+            await update.message.reply_text("Не разобрал голос. Введи текстом: /price банан 920 магнум")
         else:
             await update.message.reply_text(f"❌ Ошибка: {error_str[:100]}")

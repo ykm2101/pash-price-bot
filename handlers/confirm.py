@@ -32,32 +32,24 @@ async def create_confirmation_message(parsed_result, language: str = "ru") -> tu
 
     # Language-specific buttons and messages
     # If language is 'kk' or 'mixed' (contains Kazakh), show Kazakh menu
-    if language in ["kk", "mixed"]:  # Kazakh or mixed
+    if language in ["kk", "mixed"]:
         logger.info(f"Showing KAZAKH menu for language={language}")
-        message = f"""✅ Тану берілді ({source}):
-
-{items_text}
-
-Деректі базаға сақтау керек пе?"""
+        message = f"📋 {source}:\n\n{items_text}\n\nБазаға жазамын?"
         buttons = [
             [
-                InlineKeyboardButton("✅ Иә, сақтау", callback_data=f"confirm_yes:{session.session_id}"),
+                InlineKeyboardButton("✅ Жаз", callback_data=f"confirm_yes:{session.session_id}"),
                 InlineKeyboardButton("✏️ Түзету", callback_data=f"confirm_edit:{session.session_id}")
             ],
-            [InlineKeyboardButton("❌ Бас тарту", callback_data=f"confirm_cancel:{session.session_id}")]
+            [InlineKeyboardButton("✖ Болдырмау", callback_data=f"confirm_cancel:{session.session_id}")]
         ]
-    else:  # Russian (default)
-        message = f"""✅ Распознал ({source}):
-
-{items_text}
-
-Записать в базу?"""
+    else:
+        message = f"📋 {source}:\n\n{items_text}\n\nЗафиксировать?"
         buttons = [
             [
-                InlineKeyboardButton("✅ Да, записать", callback_data=f"confirm_yes:{session.session_id}"),
+                InlineKeyboardButton("✅ В базу", callback_data=f"confirm_yes:{session.session_id}"),
                 InlineKeyboardButton("✏️ Исправить", callback_data=f"confirm_edit:{session.session_id}")
             ],
-            [InlineKeyboardButton("❌ Отмена", callback_data=f"confirm_cancel:{session.session_id}")]
+            [InlineKeyboardButton("✖ Отставить", callback_data=f"confirm_cancel:{session.session_id}")]
         ]
 
     return message, InlineKeyboardMarkup(buttons)
@@ -94,7 +86,7 @@ async def handle_confirm_callback(update: Update, context: ContextTypes.DEFAULT_
             return None
 
         if p_session_id not in sessions:
-            await query.edit_message_text("⏰ Сессия истекла.")
+            await query.edit_message_text("⏰ Данные устарели.")
             return None
 
         session = sessions[p_session_id]
@@ -252,7 +244,7 @@ async def handle_confirm_callback(update: Update, context: ContextTypes.DEFAULT_
                 old_price_for_alert = prev_snap["price"] if prev_snap else None
 
                 await insert_snapshot(product_id, source_id, price, unit, "Текст: источник выбран")
-                await query.edit_message_text("✅ Записано")
+                await query.edit_message_text("📌 Зафиксировано.")
 
                 # Алтын-Орда → показать расчёт our_price
                 if source_id == "altyn_orda":
@@ -290,21 +282,21 @@ async def handle_confirm_callback(update: Update, context: ContextTypes.DEFAULT_
         suggested_price = int(parts[2])
         try:
             await update_our_price(product_id, suggested_price)
-            await query.edit_message_text(f"✅ Наша цена установлена: {suggested_price}₸")
+            await query.edit_message_text(ff"✅ Цена Пэш обновлена: {suggested_price}₸")
         except Exception as e:
             await query.edit_message_text(f"❌ Ошибка: {str(e)[:50]}")
         return None
 
     if action == "set_custom_price":
-        await query.edit_message_text("✏️ Введи свою цену числом:")
+        await query.edit_message_text("Введи свою цену:")
         return None
 
     if action == "skip_price":
-        await query.edit_message_text("⏭ Пропущено.")
+        await query.edit_message_text("Пропущено.")
         return None
 
     if session_id not in sessions:
-        await query.edit_message_text("⏰ Сессия истекла. Отправь данные заново.")
+        await query.edit_message_text("⏰ Данные устарели. Повтори.")
         return None
 
     session = sessions[session_id]
@@ -315,7 +307,7 @@ async def handle_confirm_callback(update: Update, context: ContextTypes.DEFAULT_
 
     if session.is_expired():
         logger.info(f"Session expired: {session_id}")
-        await query.edit_message_text("⏰ Сессия истекла. Отправь данные заново.")
+        await query.edit_message_text("⏰ Данные устарели. Повтори.")
         del sessions[session_id]
         return None
 
@@ -357,7 +349,7 @@ async def handle_confirm_callback(update: Update, context: ContextTypes.DEFAULT_
                     if session.language in ["kk", "mixed"]:
                         confirmations.append(f"✅ Сақталды: {product['name'].capitalize()} — {item.price:,.0f} ₸/{item.unit} ({source_name})")
                     else:
-                        confirmations.append(f"✅ Записал: {product['name'].capitalize()} — {item.price:,.0f} ₸/{item.unit} ({source_name})")
+                        confirmations.append(f"📌 {product['name'].capitalize()} — {item.price:,.0f} ₸/{item.unit} · {source_name}")
 
                     # ЛОГИКА 1: Алтын-Орда → расчёт our_price с наценкой
                     if source_to_write == "altyn_orda":
@@ -411,12 +403,12 @@ async def handle_confirm_callback(update: Update, context: ContextTypes.DEFAULT_
             return None
 
     elif action == "confirm_edit":
-        await query.edit_message_text("Отправь исправленные данные текстом.")
+        await query.edit_message_text("Слушаю исправление.")
         del sessions[session_id]
         return None
 
     elif action == "confirm_cancel":
-        await query.edit_message_text("❌ Отмена.")
+        await query.edit_message_text("✖ Принято, отставить.")
         del sessions[session_id]
         return None
 

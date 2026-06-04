@@ -514,7 +514,7 @@ async def handle_free_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -
                     await update.message.reply_text(msg, **kwargs)
                 await ask_next(session, reply_partial)
             else:
-                await update.message.reply_text("Не поняла 🤷 Попробуй: 'банан 920 магнум'")
+                await update.message.reply_text("Не разобрал. Попробуй: банан 920 магнум")
             return
 
         for item in parsed.items:
@@ -655,6 +655,6 @@ async def handle_free_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         logger.error(f"Free text parsing error: {error_str}")
 
         if "429" in error_str or "quota" in error_str.lower():
-            await update.message.reply_text("⚠️ Лимит Gemini API. Используй /price команду вместо текста.")
+            await update.message.reply_text("⚠️ Лимит API. Попробуй позже.")
         else:
-            await update.message.reply_text("🤷 Не понял. Попробуй ещё раз или используй /price команду")
+            await update.message.reply_text("Не разобрал. Попробуй: банан 920 магнум")

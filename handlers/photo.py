@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle incoming photos."""
-    await update.message.reply_text("🔍 Распознаю...")
+    await update.message.reply_text("🔍 Анализирую...")
 
     try:
         photo_file = await update.message.photo[-1].get_file()
@@ -67,4 +67,4 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
     except Exception as e:
         logger.error(f"Photo handler error: {str(e)}", exc_info=True)
-        await update.message.reply_text("Ошибка при обработке фото. Попробуй ещё раз.")
+        await update.message.reply_text("Фото не читается. Попробуй ещё раз.")

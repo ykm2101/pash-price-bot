@@ -26,7 +26,7 @@ async def access_check(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not await access_check(update, context):
         return
-    await update.message.reply_text("👋 Привет! Я бот для мониторинга цен. Отправь голос, фото или команду /help")
+    await update.message.reply_text("Q на связи. Голос, фото или текст — принимаю в любом виде.")
 
 def main():
     app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
