@@ -519,6 +519,15 @@ async def handle_free_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
         for item in parsed.items:
             try:
+                # Container keywords always mean altyn_orda (safety net if Gemini misses source)
+                _wholesale_containers = {'ящик', 'мешок', 'коробка', 'поддон', 'сетка'}
+                if not item.source:
+                    if item.container and item.container.lower() in _wholesale_containers:
+                        item.source = "altyn_orda"
+                    elif item.container_weight_kg:
+                        item.source = "altyn_orda"
+                        item.container = item.container or "ящик"
+
                 is_wholesale = (item.source == "altyn_orda")
                 product, created = await get_or_create_product(item.product, default_markup=25 if is_wholesale else None)
                 if created:

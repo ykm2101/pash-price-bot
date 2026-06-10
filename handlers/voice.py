@@ -43,6 +43,17 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
         item = parsed.items[0]
 
+        # Container keywords always mean altyn_orda (safety net)
+        _wholesale_containers = {'ящик', 'мешок', 'коробка', 'поддон', 'сетка'}
+        if not item.source:
+            if item.container and item.container.lower() in _wholesale_containers:
+                item.source = "altyn_orda"
+                effective_source = "altyn_orda"
+            elif item.container_weight_kg:
+                item.source = "altyn_orda"
+                item.container = item.container or "ящик"
+                effective_source = "altyn_orda"
+
         # Если нет source → показать кнопки
         if not item.source:
             session = Session(items=parsed.items, language=language)
