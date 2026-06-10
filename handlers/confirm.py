@@ -115,7 +115,7 @@ async def handle_confirm_callback(update: Update, context: ContextTypes.DEFAULT_
             price = p.get('price')
             source = p.get('source')
             unit = p.get('unit', 'кг')
-            container = p.get('container')
+            container = p.get('container') or ("ящик" if source == "altyn_orda" else None)
             weight = p.get('container_weight_kg')
 
             try:
@@ -124,28 +124,62 @@ async def handle_confirm_callback(update: Update, context: ContextTypes.DEFAULT_
                 if created:
                     await query.message.reply_text(f'➕ Добавил новый товар: {product_name}')
 
-                if is_wholesale and container and weight and price:
-                    from services.wholesale import format_conversion_note
-                    from services.supabase import insert_wholesale_lot
+                if is_wholesale and container and price:
+                    from services.wholesale import format_conversion_note, normalize_container
+                    from services.supabase import insert_wholesale_lot, get_container_weight as gcw
+
+                    # Resolve weight: use stored if available
+                    if not weight:
+                        weight = await gcw(product['id'], container)
+
+                    if not weight:
+                        # Ask user for weight via pending_weight flow
+                        context.user_data["pending_weight"] = {
+                            "product_id": product['id'],
+                            "product_name": product['name'],
+                            "container_price": price,
+                            "container": container,
+                            "unit": unit,
+                            "markup_pct": (await get_product_with_markup(product['id']) or {}).get("markup_pct"),
+                            "our_price": (await get_product_with_markup(product['id']) or {}).get("our_price"),
+                        }
+                        del sessions[p_session_id]
+                        context.user_data.pop("partial_session_id", None)
+                        await query.edit_message_text(
+                            f"📦 {product['name'].capitalize()}, {container} — {price:,.0f}₸\n"
+                            f"Сколько кг в {container}е? (напр. 18)"
+                        )
+                        return None
+
                     price_per_kg = round(price / weight, 1)
                     raw = f"{price}₸/{container} ({weight}кг) → {price_per_kg}₸/кг"
                     prev = await get_latest_price_by_source(product['id'], 'altyn_orda')
                     old_price = prev['price'] if prev else None
                     await insert_snapshot(product['id'], 'altyn_orda', price_per_kg, unit, raw)
                     product_data = await get_product_with_markup(product['id'])
-                    markup = (product_data or {}).get('markup_pct') or 25
-                    our = round(price_per_kg * (1 + markup / 100))
+                    markup_pct = (product_data or {}).get('markup_pct') or 25
+                    our = round(price_per_kg * (1 + markup_pct / 100))
                     await insert_wholesale_lot(product['id'], container, price, weight, price_per_kg, our, raw)
                     note = format_conversion_note(price, container, weight, price_per_kg)
-                    await query.edit_message_text(f"✅ Записала: {product_name.capitalize()}\n{note}")
+                    await query.edit_message_text(f"✅ Записал: {product_name.capitalize()}\n{note}")
+
+                    msg = f"💡 {price_per_kg:,.1f}₸/кг × +{markup_pct}% = {our:,.0f}₸/кг\n\nУстановить как нашу цену?"
+                    buttons = [
+                        [
+                            InlineKeyboardButton("✅ Да", callback_data=f"set_our_price:{product['id']}:{our}"),
+                            InlineKeyboardButton("✏️ Своя цена", callback_data=f"set_custom_price:{product['id']}")
+                        ],
+                        [InlineKeyboardButton("⏭ Пропустить", callback_data=f"skip_price:{product['id']}")]
+                    ]
+                    await query.message.reply_text(msg, reply_markup=InlineKeyboardMarkup(buttons))
+
                 else:
                     prev = await get_latest_price_by_source(product['id'], source)
                     old_price = prev['price'] if prev else None
                     await insert_snapshot(product['id'], source, price, unit, f"{product_name} {price} {source}")
                     source_name = get_source_display_name(source)
-                    await query.edit_message_text(f"✅ Записала: {product_name.capitalize()} — {price:,.0f} ₸/{unit} ({source_name})")
+                    await query.edit_message_text(f"✅ Записал: {product_name.capitalize()} — {price:,.0f} ₸/{unit} ({source_name})")
 
-                    # Алерты
                     product_full = await get_product_with_markup(product['id'])
                     our_price = (product_full or {}).get('our_price')
                     if our_price:
@@ -177,6 +211,38 @@ async def handle_confirm_callback(update: Update, context: ContextTypes.DEFAULT_
                 session = sessions[session_id]
                 for item in session.items:
                     item.source = source_id
+
+                # Алтын-Орда: resolve container price → price per kg before showing confirmation
+                if source_id == "altyn_orda" and session.items:
+                    item = session.items[0]
+                    item.container = item.container or "ящик"
+                    from services.supabase import get_or_create_product as _gocp
+                    from services.wholesale import resolve_price_per_kg, format_conversion_note, normalize_container
+                    product, _ = await _gocp(item.product, default_markup=25)
+                    container = normalize_container(item.container)
+                    price_per_kg, weight_used, needs_weight = await resolve_price_per_kg(product["id"], item)
+                    if needs_weight:
+                        context.user_data["pending_weight"] = {
+                            "product_id": product["id"],
+                            "product_name": product["name"],
+                            "container_price": item.price,
+                            "container": container,
+                            "unit": item.unit,
+                            "markup_pct": product.get("markup_pct"),
+                            "our_price": product.get("our_price"),
+                        }
+                        del sessions[session_id]
+                        await query.message.reply_text(
+                            f"📦 {product['name'].capitalize()}, {container} — {item.price:,.0f}₸\n"
+                            f"Сколько кг в {container}е? (напр. 18)"
+                        )
+                        return None
+                    note = format_conversion_note(item.price, container, weight_used, price_per_kg)
+                    item.price = price_per_kg
+                    item.container = None
+                    item.container_weight_kg = None
+                    session.items[0] = item
+                    await query.message.reply_text(f"🔄 {note}")
 
                 from models import ParsedResult
                 parsed = ParsedResult(source=source_id, items=session.items, language=session.language)
@@ -346,9 +412,52 @@ async def handle_confirm_callback(update: Update, context: ContextTypes.DEFAULT_
                         await query.message.reply_text("❌ Не указан источник. Используй /help для справки.")
                         return None
 
-                    source_to_write = item.source  # ← fix: was undefined
+                    source_to_write = item.source
 
-                    # Get previous price BEFORE inserting (for alert comparison)
+                    # АЛТЫН-ОРДА: если item.container выставлен — это цена контейнера, нужна конвертация
+                    if source_to_write == "altyn_orda" and item.container:
+                        from services.wholesale import format_conversion_note, normalize_container
+                        from services.supabase import insert_wholesale_lot, get_container_weight as gcw
+                        container = normalize_container(item.container)
+                        weight = item.container_weight_kg or await gcw(product["id"], container)
+                        if not weight:
+                            context.user_data["pending_weight"] = {
+                                "product_id": product["id"],
+                                "product_name": product["name"],
+                                "container_price": item.price,
+                                "container": container,
+                                "unit": item.unit,
+                                "markup_pct": (await get_product_with_markup(product["id"]) or {}).get("markup_pct"),
+                                "our_price": product.get("our_price"),
+                            }
+                            await query.message.reply_text(
+                                f"📦 {product['name'].capitalize()}, {container} — {item.price:,.0f}₸\n"
+                                f"Сколько кг в {container}е? (напр. 18)"
+                            )
+                            continue
+                        price_per_kg = round(item.price / weight, 1)
+                        product_data = await get_product_with_markup(product["id"])
+                        markup_pct = (product_data or {}).get("markup_pct") or 25
+                        our = round(price_per_kg * (1 + markup_pct / 100))
+                        raw = f"{item.price}₸/{container} ({weight}кг) → {price_per_kg}₸/кг"
+                        prev_snap = await get_latest_price_by_source(product["id"], "altyn_orda")
+                        old_price_for_alert = prev_snap["price"] if prev_snap else None
+                        await insert_snapshot(product["id"], "altyn_orda", price_per_kg, item.unit, raw)
+                        await insert_wholesale_lot(product["id"], container, item.price, weight, price_per_kg, our, raw)
+                        note = format_conversion_note(item.price, container, weight, price_per_kg)
+                        confirmations.append(f"📌 {product['name'].capitalize()}\n{note}")
+                        msg = f"💡 {price_per_kg:,.1f}₸/кг × +{markup_pct}% = {our:,.0f}₸/кг\n\nУстановить как нашу цену?"
+                        buttons = [
+                            [
+                                InlineKeyboardButton("✅ Да", callback_data=f"set_our_price:{product['id']}:{our}"),
+                                InlineKeyboardButton("✏️ Своя цена", callback_data=f"set_custom_price:{product['id']}")
+                            ],
+                            [InlineKeyboardButton("⏭ Пропустить", callback_data=f"skip_price:{product['id']}")]
+                        ]
+                        await query.message.reply_text(msg, reply_markup=InlineKeyboardMarkup(buttons))
+                        continue
+
+                    # ОБЫЧНЫЙ ПУТЬ: вставка snapshot (цена уже per-kg)
                     prev_snap = await get_latest_price_by_source(product["id"], source_to_write)
                     old_price_for_alert = prev_snap["price"] if prev_snap else None
 
@@ -363,20 +472,19 @@ async def handle_confirm_callback(update: Update, context: ContextTypes.DEFAULT_
 
                     source_name = get_source_display_name(source_to_write)
 
-                    # Language-specific confirmation message
                     if session.language in ["kk", "mixed"]:
                         confirmations.append(f"✅ Сақталды: {product['name'].capitalize()} — {item.price:,.0f} ₸/{item.unit} ({source_name})")
                     else:
                         confirmations.append(f"📌 {product['name'].capitalize()} — {item.price:,.0f} ₸/{item.unit} · {source_name}")
 
-                    # ЛОГИКА 1: Алтын-Орда → расчёт our_price с наценкой
+                    # Алтын-Орда без контейнера → цена уже per-kg, показать наценку
                     if source_to_write == "altyn_orda":
                         try:
                             product_data = await get_product_with_markup(product["id"])
                             if product_data and product_data.get("markup_pct"):
                                 markup_pct = product_data["markup_pct"]
                                 suggested_price = item.price * (1 + markup_pct / 100)
-                                msg = f"💡 {product['name'].capitalize()}: закупка {item.price}₸ → цена Пэш: {suggested_price:,.0f}₸ (+{markup_pct}%)\n\nУстановить как нашу цену?"
+                                msg = f"💡 {product['name'].capitalize()}: {item.price:,.0f}₸/кг × +{markup_pct}% = {suggested_price:,.0f}₸/кг\n\nУстановить как нашу цену?"
                                 buttons = [
                                     [
                                         InlineKeyboardButton("✅ Да", callback_data=f"set_our_price:{product['id']}:{int(suggested_price)}"),
@@ -388,7 +496,7 @@ async def handle_confirm_callback(update: Update, context: ContextTypes.DEFAULT_
                         except Exception as e:
                             logger.error(f"Our_price calculation error: {str(e)}")
 
-                    # ЛОГИКА 2: Магазин/Базар/Лавка → алерты о разнице с нашей ценой
+                    # Магазин/Базар/Лавка → алерты
                     else:
                         try:
                             our_price = product.get("our_price")
