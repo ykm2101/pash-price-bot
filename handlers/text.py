@@ -677,8 +677,9 @@ async def handle_free_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -
                             await update.message.reply_text(alert)
 
             except Exception as e:
-                logger.error(f"Insert error for {item.product}: {str(e)}")
-                await update.message.reply_text(f"⚠️ Ошибка при записи {item.product}")
+                import traceback
+                logger.error(f"Insert error for {item.product}: {str(e)}\n{traceback.format_exc()}")
+                await update.message.reply_text(f"⚠️ Ошибка: {str(e)[:200]}")
 
     except Exception as e:
         error_str = str(e)
