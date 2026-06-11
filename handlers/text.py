@@ -540,6 +540,15 @@ async def handle_free_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -
                         item.source = "altyn_orda"
                         item.container = item.container or "ящик"
 
+                # Если altyn_orda и вес не извлечён Gemini — найти второе число ≤100 в тексте
+                if item.source == "altyn_orda" and not item.container_weight_kg:
+                    nums = [int(n) for n in re.findall(r'\b(\d+)\b', text)]
+                    for n in nums:
+                        if n != int(item.price) and 1 <= n <= 100:
+                            item.container_weight_kg = float(n)
+                            item.container = item.container or "ящик"
+                            break
+
                 is_wholesale = (item.source == "altyn_orda")
                 product, created = await get_or_create_product(item.product, default_markup=25 if is_wholesale else None)
                 if created:
