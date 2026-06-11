@@ -239,6 +239,18 @@ async def handle_free_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     if not text or len(text) < 1 or len(text) > 200:
         return
 
+    # Ждём нашу цену после нажатия "✏️ Своя цена"
+    if "awaiting_custom_price" in context.user_data:
+        product_id = context.user_data.pop("awaiting_custom_price")
+        try:
+            price_val = float(text.replace(',', '.').replace(' ', ''))
+            from services.supabase import update_our_price
+            await update_our_price(product_id, price_val)
+            await update.message.reply_text(f"✅ Цена Пэш: {price_val:,.0f}₸")
+        except ValueError:
+            await update.message.reply_text("Не понял цену. Напиши число, например: 820")
+        return
+
     # /cancel — сбросить partial состояние
     if text.lower() in ('/cancel', 'отмена', 'cancel'):
         pid = context.user_data.pop("partial_session_id", None)

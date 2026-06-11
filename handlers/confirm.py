@@ -372,7 +372,9 @@ async def handle_confirm_callback(update: Update, context: ContextTypes.DEFAULT_
         return None
 
     if action == "set_custom_price":
-        await query.edit_message_text("Введи свою цену:")
+        product_id = int(parts[1]) if len(parts) > 1 else None
+        context.user_data["awaiting_custom_price"] = product_id
+        await query.edit_message_text("Введи нашу цену (₸/кг):")
         return None
 
     if action == "skip_price":

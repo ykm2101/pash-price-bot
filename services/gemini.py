@@ -19,19 +19,25 @@ def _normalize_source(raw: str):
     return get_source_by_alias(raw)
 
 
+VALID_CONTAINERS = {"ящик", "мешок", "коробка", "поддон"}
+
 def _parse_items(data: dict) -> list:
     """Парсит items из ответа Gemini в список PriceEntry."""
     items = []
     for item in data.get("items", []):
         raw_source = item.get("source")
         source, source_detail = _normalize_source(raw_source)
+        container = item.get("container")
+        # Reject any container value that isn't a known type (Gemini sometimes puts garbage here)
+        if container and container.lower().strip() not in VALID_CONTAINERS:
+            container = None
         items.append(PriceEntry(
             product=item["product"],
             price=item["price"],
             unit=item["unit"],
             source=source,
             source_detail=source_detail,
-            container=item.get("container"),
+            container=container,
             container_weight_kg=item.get("container_weight_kg")
         ))
     return items
